@@ -23,6 +23,11 @@ git clone -o cmg-central https://github.com/CERN-PH-CMG/cmgtools-lite.git -b 80X
 cd CMGTools
 ```
 
+Copy our custom script to CMGTools
+```
+cp ../../postmortem/globalEFTreWeighting.py CMGTools/TTHAnalysis/python/tools/nanoAOD/
+```
+
 Compile CMSSW
 ```
 cd $CMSSW_BASE/src
