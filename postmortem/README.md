@@ -25,7 +25,7 @@ git clone -o cmg-central https://github.com/CERN-PH-CMG/cmgtools-lite.git -b 80X
 cd CMGTools
 ```
 
-Copy our custom script to CMGTools
+Copy our custom script to CMGTools (assuming CMSSW was installed in the same dir as your lobster skimming script)
 ```
 cp ../../postmortem/globalEFTreWeighting.py CMGTools/TTHAnalysis/python/tools/nanoAOD/
 ```
