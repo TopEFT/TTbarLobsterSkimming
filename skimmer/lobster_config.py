@@ -3,104 +3,69 @@ import os
 import sys
 import shutil
 import subprocess
-
+from os import path
 from lobster import cmssw
 from lobster.core import AdvancedOptions, Category, Config, Dataset, ParentDataset, StorageConfiguration, Workflow
+
+timestamp_tag = datetime.datetime.now().strftime('%Y%m%d_%H%M')
 
 sys.path.append(os.path.split(__file__)[0])
 from tools.utils import read_cfg
 
 
-TSTAMP1 = datetime.datetime.now().strftime('%Y%m%d_%H%M')
-TSTAMP2 = datetime.datetime.now().strftime('%Y_%m_%d')
+sandbox_location = "/users/hnelson2/TTbarLobsterSkimming/skimmer/CMSSW_10_6_19_patch2/"
+hadd_path = os.path.join(sandbox_location, 'src/PhysicsTools/NanoAODTools/scripts/haddnano.py')
 
-top_dir = subprocess.check_output(["git","rev-parse","--show-toplevel"])
-top_dir = top_dir.strip()
-
-sandbox_location = os.path.join(top_dir,"CMSSW_10_6_19_patch2")
-
-testing = True
-
-step = "skims"
-tag = "data/NAOD_ULv9_new-lepMVA/UL2018/Full"               # Not used if in "testing" mode
-ver = "v1"
-
+cfg_fpath = "/users/hnelson2/TTbarLobsterSkimming/samples/"
 cfg_name = "data_samples.cfg"
-#cfg_name = "mc_signal_samples.cfg"
-cfg_fpath = os.path.join(top_dir,"topcoffea/topcoffea/cfg",cfg_name)
 
+tag = "data/UL2018"               
+# tag = "test"
+ver = "v1"
 # Only process json files that match these regexs (empty list matches everything)
 match = ['.*UL2018\\.json']
 # match = ['DoubleEG_F-UL2016\\.json']
 # match = ['MuonEG_B-UL2017\\.json']
 
-skim_cut = "'nMuon+nElectron >=2 && Sum$( Muon_looseId && Muon_miniPFRelIso_all < 0.4 && Muon_sip3d <8) + Sum$(Electron_miniPFRelIso_all < 0.4 && Electron_sip3d <8 && Electron_mvaFall17V2noIso_WPL) >=2'"
+skim_cut = "'nMuon+nElectron >=2'"
 
-master_label = 'EFT_{step}_{tstamp}'.format(step=step,tstamp=TSTAMP1)
-workdir_path = "{path}/{step}/{tag}/{ver}".format(step=step,tag=tag,ver=ver,path="/tmpscratch/users/$USER")
-plotdir_path = "{path}/{step}/{tag}/{ver}".format(step=step,tag=tag,ver=ver,path="~/www/lobster")
-output_path  = "{path}/{step}/{tag}/{ver}".format(step=step,tag=tag,ver=ver,path="/store/user/$USER")
-
-if testing:
-    workdir_path = "{path}/{step}/test/lobster_test_{tstamp}".format(step=step,tstamp=TSTAMP1,path="/tmpscratch/users/$USER")
-    plotdir_path = "{path}/{step}/test/lobster_test_{tstamp}".format(step=step,tstamp=TSTAMP1,path="~/www/lobster")
-    output_path  = "{path}/{step}/test/lobster_test_{tstamp}".format(step=step,tstamp=TSTAMP1,path="/store/user/$USER")
+master_label = 'T3_EFT_{tstamp}'.format(tstamp=timestamp_tag)
+output_path  = "/store/user/$USER/TTbarskims/{tag}/{ver}".format(tag=tag, ver=ver)
+workdir_path = "/tmpscratch/users/$USER/TTbarskims/{tag}/{ver}".format(tag=tag, ver=ver)
+plotdir_path = "~/afs/www/lobster/TTbarskims/{tag}/{ver}".format(tag=tag, ver=ver)
 
 # Different xrd src redirectors depending on where the inputs are stored
-xrd_src = "ndcms.crc.nd.edu"            # Use this for accessing samples from the GRID
-#xrd_src = "cmsxrootd.fnal.gov"          # Only use this if the ND XCache is giving troubles
-#xrd_src = "deepthought.crc.nd.edu"      # Use this for accessing samples from ND T3
 
-xrd_dst = "deepthought.crc.nd.edu"
-
-storage_base = StorageConfiguration(
-    input=[
-        "root://{host}//store/".format(host=xrd_src)  # Note the extra slash after the hostname
+storage = StorageConfiguration(
+    input = [
+        "file:///cms/cephfs/data/",
+        "root://cmsxrootd.crc.nd.edu/",
     ],
+    
     output=[
-        "hdfs://eddie.crc.nd.edu:19000{path}".format(path=output_path),
-        "root://{host}/{path}".format(host=xrd_dst,path=output_path),    # Note the extra slash after the hostname
+        "file:///cms/cephfs/data" + output_path,
+        "root://cmsxrootd.crc.nd.edu/"+output_path,    
     ],
-    disable_input_streaming=True,
 )
-
-
-storage_cmssw = StorageConfiguration(
-    output = [
-        "hdfs://eddie.crc.nd.edu:19000{path}".format(path=output_path),
-        "root://{host}/{path}".format(host=xrd_dst,path=output_path),
-    ],
-    disable_input_streaming=True,
-)
-
-storage = storage_cmssw
 
 # See tools/utils.py for dict structure of returned object
-cfg = read_cfg(cfg_fpath,match=match)
+cfg = read_cfg(os.path.join(cfg_fpath, cfg_name),match=match)
 
 cat = Category(
     name='processing',
     cores=1,
-    memory=1500,
-    disk=4500,
+    memory=2000,
+    disk=6000,
 )
 
 wf = []
 for sample in sorted(cfg['jsons']):
     jsn = cfg['jsons'][sample]
-    print "Sample: {}".format(sample)
-    for fn in jsn['files']:
-        print "\t{}".format(fn)
-    files = [x.replace('/store/','') for x in jsn['files']]
-    module_name = ''
-    if 'HIPM_UL2016' in sample:
-        module_name = 'lepMVA_2016_preVFP'
-    elif 'UL2017' in sample:
-        module_name = 'lepMVA_2017'
-    elif 'UL2018' in sample:
-        module_name = 'lepMVA_2018'
-    else:
-        module_name = 'lepMVA_2016'
+    print(f"Sample: {sample}")
+    files = jsn['files']
+    # for fn in jsn['files']:
+    #     print "\t{}".format(fn)
+    # files = [x.replace('/store/','') for x in jsn['files']]
 
     ds_base = Dataset(
         files=files,
@@ -117,7 +82,6 @@ for sample in sorted(cfg['jsons']):
 
     cmd = ['python','skim_wrapper.py']
     cmd.extend(['--cut',skim_cut])
-    cmd.extend(['--module',module_name])
     cmd.extend(['--out-dir','.'])
     cmd.extend(['@inputfiles'])
     skim_wf = Workflow(
@@ -125,7 +89,7 @@ for sample in sorted(cfg['jsons']):
         sandbox=cmssw.Sandbox(release=sandbox_location),
         dataset=ds_cmssw,
         category=cat,
-        extra_inputs=['skim_wrapper.py',os.path.join(sandbox_location,'src/PhysicsTools/NanoAODTools/scripts/haddnano.py')],
+        extra_inputs=['skim_wrapper.py',hadd_path],
         outputs=['output.root'],
         command=' '.join(cmd),
         merge_command='python haddnano.py @outputfiles @inputfiles',
@@ -142,14 +106,15 @@ config = Config(
     storage=storage,
     workflows=wf,
     advanced=AdvancedOptions(
-        dashboard=False, # Important to avoid a crash caused by out of date WMCore
+        # dashboard=False, # Important to avoid a crash caused by out of date WMCore
         bad_exit_codes=[127, 160],
         log_level=1,
         payload=10,
-        xrootd_servers=[
-            'ndcms.crc.nd.edu',
-            # 'cmsxrootd.fnal.gov',
-            # 'deepthought.crc.nd.edu'
-        ]
+        osg_version='3.6',
+        # xrootd_servers=[
+        #     'ndcms.crc.nd.edu',
+        #     # 'cmsxrootd.fnal.gov',
+        #     # 'deepthought.crc.nd.edu'
+        # ]
     )
 )

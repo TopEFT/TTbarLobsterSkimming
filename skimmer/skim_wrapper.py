@@ -16,27 +16,48 @@ module   = args.module
 out_dir  = args.out_dir
 infiles  = args.infiles
 
+
+REDIRECTOR = "root://cmsxrootd.crc.nd.edu/"
+POSTFIX = "_Skim"
+
 indent = " "*4*2
 
 s = ["Current working directory:"]
 for f in os.listdir('.'):
     s.append(indent + "{}".format(f))
 print "\n".join(s)
+print "\n\n Received infiles: {}\n\n".format(infiles)
 
-# This is going to be our last resort...
 local_files = []
-infiles = [inf.replace('file:', 'file://') for inf in infiles]
 for inf in infiles:
     local_name = inf.rsplit("/")[-1]
-    local_files.append(local_name)
-    if local_name.replace("file:","") in os.listdir('.'):
+
+    if inf.startswith('/store'):
+        remote_path = REDIRECTOR + inf
+        ceph_path = "/cms/cephfs/data" + inf
+    else:
+        remote_path = inf.replace('file:', 'file://')
+        ceph_path = None
+    
+    if local_name in os.listdir('.'):
+        print "File {} already exists. Skipping xrdcp.".format(local_name)
+        local_files.append(local_name)
         continue
-    elif local_name in os.listdir('.'):
-        continue
-    cmd_args = ['xrdcp','-f',inf,local_name]
-    s = "Copy command: {}".format(" ".join(cmd_args))
-    print s
-    subprocess.check_call(cmd_args)
+
+    try:
+        cmd_args = ['xrdcp', '-f', remote_path, local_name]
+        print "Executing: {}".format(" ".join(cmd_args))
+        subprocess.check_call(cmd_args)
+        local_files.append(local_name)
+
+    except subprocess.CalledProcessError:
+        print "xrdcp failed for {}.".format(inf)
+        if ceph_path and os.path.exists(ceph_path):
+            print "Ceph path found! Using direct path: {}".format(ceph_path)
+            local_files.append(ceph_path)
+        else:
+            print "Ceph mount not available or path wrong. Attempting remote streaming via XRootD..."
+            local_files.append(remote_path)
 
 s = "Sleeping..."
 print s
@@ -46,7 +67,8 @@ to_skim = local_files
 
 cmd_args = ['nano_postproc.py']
 cmd_args.extend(['-c','{}'.format(skim_cut)])
-cmd_args.extend(['-I','CMGTools.TTHAnalysis.tools.nanoAOD.ttH_modules','lepJetBTagDeepFlav,{}'.format(module)])
+cmd_args.extend(['--postfix', POSTFIX])
+# cmd_args.extend(['-I','CMGTools.TTHAnalysis.tools.nanoAOD.ttH_modules','lepJetBTagDeepFlav,{}'.format(module)])
 cmd_args.extend([out_dir])
 cmd_args.extend(to_skim)
 
@@ -54,22 +76,29 @@ s = "Skim command: {}".format(" ".join(cmd_args))
 print s
 subprocess.check_call(cmd_args)
 
-s = "Sleeping..."
-print s
-time.sleep(10)
- 
-s = ["Current working directory:"]
-print s
-for f in os.listdir('.'):
-    s.append(indent + "{}".format(f))
-print "\n".join(s)
+to_merge = []
+for path in to_skim:
+    # Get the basename if it was a remote path
+    base = path.rsplit("/")[-1]
+    name_no_ext = base.replace(".root", "")
+    expected_output = "{}{}.root".format(name_no_ext, POSTFIX)
 
-# Need to merge any skim outputs into a single file that lobster expects
-to_merge = [ x.rsplit("/")[-1].replace(".root","_Skim.root") for x in to_skim ]
+    if os.path.exists(expected_output):
+        to_merge.append(expected_output)
+    else:
+        print "Warning: Expected output {} not found!".format(expected_output)
 
-cmd_args = ['python','haddnano.py','output.root']
+if not to_merge:
+    print "Error: No skimmed files found to merge. Check nano_postproc logs."
+    sys.exit(1)
+
+cmd_args = ['python', 'haddnano.py', 'output.root']
 cmd_args.extend(to_merge)
-s = "Merge command: {}".format(" ".join(cmd_args))
-print s
+
+print "\nMerge command: {}".format(" ".join(cmd_args))
 subprocess.check_call(cmd_args)
+
+print "\nProcessing complete. Final directory state:"
+for f in os.listdir('.'):
+    print "{}{}".format(indent, f)
 
