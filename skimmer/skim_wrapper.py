@@ -66,7 +66,10 @@ time.sleep(10)
 to_skim = local_files
 
 cmd_args = ['nano_postproc.py']
-cmd_args.extend(['-c','{}'.format(skim_cut)])
+if module: 
+    cmd_args.extend(['-I', 'PhysicsTools.NanoAODTools.postprocessing.modules.lepTop.lepTopSkimModule', 'lepTopSkimModuleConstr'])
+else: 
+    cmd_args.extend(['-c','{}'.format(skim_cut)])
 cmd_args.extend(['--postfix', POSTFIX])
 # cmd_args.extend(['-I','CMGTools.TTHAnalysis.tools.nanoAOD.ttH_modules','lepJetBTagDeepFlav,{}'.format(module)])
 cmd_args.extend([out_dir])

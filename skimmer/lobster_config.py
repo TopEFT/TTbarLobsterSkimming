@@ -17,22 +17,43 @@ sandbox_location = "/users/hnelson2/TTbarLobsterSkimming/skimmer/CMSSW_10_6_19_p
 hadd_path = os.path.join(sandbox_location, 'src/PhysicsTools/NanoAODTools/scripts/haddnano.py')
 
 cfg_fpath = "/users/hnelson2/TTbarLobsterSkimming/samples/"
-cfg_name = "data_samples.cfg"
 
-tag = "data/UL2018"               
-# tag = "test"
-ver = "v1"
-# Only process json files that match these regexs (empty list matches everything)
-match = ['.*UL2018\\.json']
-# match = ['DoubleEG_F-UL2016\\.json']
-# match = ['MuonEG_B-UL2017\\.json']
 
-skim_cut = "'nMuon+nElectron >=2'"
+# # used this for the full ptSkimming of run2, just an issue with one file
+# # outdir: /store/user/$USER/skims/{tag}/{ver}
+# cfg_name = "data_samples.cfg"
+# tag = "data/FullRun2"
+# ver = "ptSkim"
+# match = ['.*\\.json']
+
+# # outdir: /store/user/$USER/skims/{tag}/{ver}
+# cfg_name = "mc_DY_samples.cfg"
+# tag = "mc/ptSkim"
+# ver = "DY"
+# match = ['.*\\.json']
+
+# outdir: /store/user/$USER/skims/{tag}/{ver}
+# cfg_name = "mc_background_samples.cfg"
+# tag = "mc/ptSkim"
+# ver = "background"
+# match = ['.*\\.json']
+
+# # outdir: /store/user/$USER/skims/{tag}/{ver}
+# cfg_name = "mc_signal_samples.cfg"
+# tag = "mc/ptSkim"
+# ver = "PowhegTTto2L2Nu"
+# match = ['.*\\.json']
+
+# outdir: /store/user/$USER/skims/{tag}/{ver}
+cfg_name = "mc_tW_samples.cfg"
+tag = "mc/ptSkim"
+ver = "tW_NoFullyHadronicDecays"
+match = ['.*\\.json']
 
 master_label = 'T3_EFT_{tstamp}'.format(tstamp=timestamp_tag)
-output_path  = "/store/user/$USER/TTbarskims/{tag}/{ver}".format(tag=tag, ver=ver)
-workdir_path = "/tmpscratch/users/$USER/TTbarskims/{tag}/{ver}".format(tag=tag, ver=ver)
-plotdir_path = "~/afs/www/lobster/TTbarskims/{tag}/{ver}".format(tag=tag, ver=ver)
+output_path  = "/store/user/$USER/skims/{tag}/{ver}".format(tag=tag, ver=ver)
+workdir_path = "/tmpscratch/users/$USER/skims/{tag}/{ver}".format(tag=tag, ver=ver)
+plotdir_path = "~/afs/www/lobster/skims/{tag}/{ver}".format(tag=tag, ver=ver)
 
 # Different xrd src redirectors depending on where the inputs are stored
 
@@ -54,8 +75,8 @@ cfg = read_cfg(os.path.join(cfg_fpath, cfg_name),match=match)
 cat = Category(
     name='processing',
     cores=1,
-    memory=2000,
-    disk=6000,
+    memory=4000,
+    disk=10000,
 )
 
 wf = []
@@ -72,22 +93,25 @@ for sample in sorted(cfg['jsons']):
         files_per_task=1
     )
 
-    ds_cmssw = cmssw.Dataset(
-        dataset=jsn['path'],
-        lumis_per_task=1,   # Since file_based is true, this will be files_per_task
-        file_based=True
-    )
+    # ds_cmssw = cmssw.Dataset(
+    #     dataset=jsn['path'],
+    #     lumis_per_task=1,   # Since file_based is true, this will be files_per_task
+    #     file_based=True
+    # )
 
-    ds = ds_cmssw
+    # ds = ds_cmssw         # used to run over Data
+    ds = ds_base
 
     cmd = ['python','skim_wrapper.py']
-    cmd.extend(['--cut',skim_cut])
+    # skim_cut = "'nMuon+nElectron >=2'"
+    # cmd.extend(['--cut',skim_cut]) # use this with the above line skim_cut instead of the module
+    cmd.extend(['--module', 'lepTopSkimModule'])
     cmd.extend(['--out-dir','.'])
     cmd.extend(['@inputfiles'])
     skim_wf = Workflow(
         label=sample.replace('-','_'),
         sandbox=cmssw.Sandbox(release=sandbox_location),
-        dataset=ds_cmssw,
+        dataset=ds,
         category=cat,
         extra_inputs=['skim_wrapper.py',hadd_path],
         outputs=['output.root'],
